@@ -1,5 +1,6 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <opencv2/highgui/highgui.hpp>
 #include <windows.h>
 #include <commdlg.h>
 
@@ -9,7 +10,7 @@ using namespace cv;
 // Function to open file dialog for selecting an image
 string openFileDialog() {
     OPENFILENAMEA ofn;       // common dialog box structure for ANSI version
-    char szFile[260];       // buffer for file name
+    char szFile[260];        // buffer for file name
     string fileName;
 
     // Initialize OPENFILENAME
@@ -26,7 +27,7 @@ string openFileDialog() {
     ofn.lpstrInitialDir = NULL;
     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_DONTADDTORECENT;
 
-    // Display the Open dialog box. 
+    // Display the Open dialog box.
     if (GetOpenFileNameA(&ofn) == TRUE) {
         fileName = ofn.lpstrFile;
     }
@@ -34,72 +35,30 @@ string openFileDialog() {
     return fileName;
 }
 
-// Function to save edited image using a file dialog
-string saveFileDialog() {
-    OPENFILENAMEA ofn;       // common dialog box structure for ANSI version
-    char szFile[260];       // buffer for file name
-    string fileName;
-
-    // Initialize OPENFILENAME
-    ZeroMemory(&ofn, sizeof(ofn));
-    ofn.lStructSize = sizeof(ofn);
-    ofn.hwndOwner = NULL;
-    ofn.lpstrFile = szFile;
-    ofn.lpstrFile[0] = '\0';
-    ofn.nMaxFile = sizeof(szFile);
-    ofn.lpstrFilter = "JPEG\0*.jpg\0PNG\0*.png\0BMP\0*.bmp\0All Files\0*.*\0";
-    ofn.nFilterIndex = 1;
-    ofn.lpstrInitialDir = NULL;
-    ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT;
-
-    // Display the Save dialog box.
-    if (GetSaveFileNameA(&ofn) == TRUE) {
-        fileName = ofn.lpstrFile;
+// Function to save edited image with a default file name and path
+string saveEditedImage(const Mat& image) {
+    string defaultSavePath = "C:/Users/Omar Islam/Pictures/edited_image.jpg"; // Default save path and filename
+    if (imwrite(defaultSavePath, image)) {
+        cout << "Edited image saved as '" << defaultSavePath << "'." << endl;
+        return defaultSavePath;
     }
-
-    return fileName;
+    else {
+        cout << "Error: Failed to save edited image to '" << defaultSavePath << "'." << endl;
+        return ""; // Return empty string to indicate failure
+    }
 }
 
-// Function to display a list of available editing tools beside the image
-void displayToolsList(Mat& image) {
-    string toolsList = "Available Tools:\n";
-    toolsList += "   1. Convert to Grayscale\n";
-    toolsList += "   2. Apply Gaussian Blur\n";
-    toolsList += "   3. Perform Edge Detection\n";
-    toolsList += "   4. Reset to Original Image\n";
-    toolsList += "   5. Save Image\n";
-    putText(image, toolsList, Point(image.cols + 20, 20), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1, LINE_AA);
-}
+// Function to display instructions on the tools window
+void displayToolInstructions() {
+    Mat toolsWindow = Mat::zeros(200, 300, CV_8UC3);
+    putText(toolsWindow, "Available Tools:", Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(255, 255, 255), 1, LINE_AA);
+    putText(toolsWindow, "1. Convert to Grayscale", Point(10, 60), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1, LINE_AA);
+    putText(toolsWindow, "2. Increase Brightness", Point(10, 90), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1, LINE_AA);
+    putText(toolsWindow, "3. Decrease Brightness", Point(10, 120), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1, LINE_AA);
+    putText(toolsWindow, "4. Reset to Original Image", Point(10, 150), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1, LINE_AA);
+    putText(toolsWindow, "5. Save Image", Point(10, 180), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 1, LINE_AA);
 
-// Function to handle button clicks and perform corresponding actions
-void onToolButtonClicked(int tool, Mat& image, const string& imagePath, Mat& edges, string& savePath) {
-    switch (tool) {
-    case 1: // Convert to grayscale
-        cvtColor(image, image, COLOR_BGR2GRAY);
-        imshow("Edited Image", image);
-        break;
-    case 2: // Apply Gaussian blur
-        GaussianBlur(image, image, Size(5, 5), 0);
-        imshow("Edited Image", image);
-        break;
-    case 3: // Perform edge detection using Canny
-        Canny(image, edges, 50, 150);
-        imshow("Edited Image", edges);
-        break;
-    case 4: // Reset to original image
-        image = imread(imagePath); // Reload original image
-        imshow("Edited Image", image);
-        break;
-    case 5: // Save the edited image
-        savePath = saveFileDialog();
-        if (!savePath.empty()) {
-            imwrite(savePath, image);
-            cout << "Edited image saved as '" << savePath << "'." << endl;
-        }
-        break;
-    default:
-        cout << "Invalid tool." << endl;
-    }
+    imshow("Tools", toolsWindow);
 }
 
 int main() {
@@ -109,11 +68,13 @@ int main() {
         return 0;
     }
 
-    Mat image = imread(imagePath);
-    if (image.empty()) {
+    Mat originalImage = imread(imagePath);
+    if (originalImage.empty()) {
         cout << "Error: Unable to load image from path: " << imagePath << endl;
         return -1;
     }
+
+    Mat image = originalImage.clone(); // Clone the original image for editing
 
     const int defaultWindowWidth = 800;
     const int defaultWindowHeight = 600;
@@ -130,41 +91,63 @@ int main() {
 
     namedWindow("Edited Image", WINDOW_NORMAL);
     resizeWindow("Edited Image", windowWidth, windowHeight);
-    displayToolsList(image);
     imshow("Edited Image", image);
 
-    Mat edges;
+    displayToolInstructions(); // Display the tools window
+
     string savePath;
 
-    namedWindow("Tools", WINDOW_NORMAL);
+    bool isEdited = false;
+    char lastKey = 0;
 
-    createButton("Convert to Grayscale", [](int, void* userdata) {
-        Mat* data = (Mat*)userdata;
-        onToolButtonClicked(1, *data, *(string*)(data + 1), *(Mat*)(data + 2), *(string*)(data + 3));
-        }, &image, QT_PUSH_BUTTON);
+    double brightnessLevel = 0.0; // Initial brightness level
 
-    createButton("Apply Gaussian Blur", [](int, void* userdata) {
-        Mat* data = (Mat*)userdata;
-        onToolButtonClicked(2, *data, *(string*)(data + 1), *(Mat*)(data + 2), *(string*)(data + 3));
-        }, &image, QT_PUSH_BUTTON);
+    while (true) {
+        char key = waitKey(0);
+        if (key == lastKey) {
+            // Toggle effect
+            if (isEdited) {
+                image = originalImage.clone();
+                brightnessLevel = 0.0;
+            }
+            else {
+                switch (key) {
+                case '1':
+                    cvtColor(image, image, COLOR_BGR2GRAY);
+                    break;
+                case '2':
+                    // Increase brightness
+                    brightnessLevel += 40.0;
+                    image.convertTo(image, -1, 1.0, brightnessLevel);
+                    break;
+                case '3':
+                    // Decrease brightness
+                    brightnessLevel -= 40.0;
+                    image.convertTo(image, -1, 1.0, brightnessLevel);
+                    break;
+                case '4':
+                    image = originalImage.clone();
+                    brightnessLevel = 0.0;
+                    break;
+                }
+            }
+            isEdited = !isEdited;
+        }
+        else if (key == 27) { // Escape key
+            break; // Exit the loop
+        }
+        else if (key == '5') {
+            savePath = saveEditedImage(image);
+            if (savePath.empty()) {
+                cout << "Error: Failed to save edited image." << endl;
+            }
+        }
 
-    createButton("Perform Edge Detection", [](int, void* userdata) {
-        Mat* data = (Mat*)userdata;
-        onToolButtonClicked(3, *data, *(string*)(data + 1), *(Mat*)(data + 2), *(string*)(data + 3));
-        }, &image, QT_PUSH_BUTTON);
+        imshow("Edited Image", image);
+        lastKey = key;
+    }
 
-    createButton("Reset to Original Image", [](int, void* userdata) {
-        Mat* data = (Mat*)userdata;
-        onToolButtonClicked(4, *data, *(string*)(data + 1), *(Mat*)(data + 2), *(string*)(data + 3));
-        }, &image, QT_PUSH_BUTTON);
-
-    createButton("Save Image", [](int, void* userdata) {
-        Mat* data = (Mat*)userdata;
-        onToolButtonClicked(5, *data, *(string*)(data + 1), *(Mat*)(data + 2), *(string*)(data + 3));
-        }, &image, QT_PUSH_BUTTON);
-
-
-    waitKey(0);
+    destroyAllWindows(); // Close all windows before exiting
 
     return 0;
 }
